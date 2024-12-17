@@ -94,7 +94,7 @@ Through data cleaning, feature engineering, model training, and performance eval
 The performance of the models is summarized as follows:
 
 | **Model** | **RMSE (No Cross-Validation)** | **RMSE (With Cross-Validation)** |
-|------------------------|------------------------|------------------------|
+|----|----|----|
 | **Linear Regression** | 13.05 | 0.4074 |
 | **CART** | 9.64 | 0.5998 |
 | **Random Forest** | **8.83** | **0.3968** |
