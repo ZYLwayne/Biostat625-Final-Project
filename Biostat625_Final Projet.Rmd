@@ -1,0 +1,525 @@
+---
+title: 'Estimation And Prediction Of Patient Length Of Stay'
+author: "Ya Wang, Yu Qing, Suyuan Wang, Yile Zhu"
+subtitle: https://github.com/ZYLwayne/Biostat625-Final-Project
+output:
+  pdf_document:
+    latex_engine: xelatex
+    keep_tex: true
+  html_document:
+    df_print: paged
+  word_document: default
+mainfont: Times New Roman
+geometry: left=2cm, right=2cm,top=2cm, bottom=2cm
+fontsize: 10pt
+documentclass: article
+---
+
+# Abstract
+
+Increasing healthcare costs and the availability of large amounts of healthcare data have led to a search for ways to improve the efficiency of healthcare. Length of stay (LOS) and its impact have significant economic and human implications, and therefore the prediction of this key parameter has been the subject of research in recent years. The aim of this paper is to explore the key factors affecting the length of stay (LOS) of patients and to predict the length of stay through a variety of machine learning models. The study uses a dataset containing 28,109 records covering demographic characteristics, admission type and cost information. We found that patients with longer lengths of stay were concentrated in the 70+ age group, male patients, black or African American, and hospital service areas in New York City and the Southland. In addition, trauma admissions had significantly longer lengths of stay than other admission types. Whereas there was a significant linear relationship between total charges and total costs (R² = 0.8046, p \< 2e-16), costs emerged as a significant predictor of length of stay. Notably this study compared the performance of three models: linear regression, CART (Classification and Regression Trees) and Random Forest and further assessed their stability through cross-validation (CV). The results showed that the random forest model achieved the lowest RMSE(8.83) among all models, demonstrating its superiority in capturing complex nonlinear relationships and feature interactions. In addition, the findings provide data support and decision-making basis for hospitals in cost management, resource allocation, and high-risk patient identification.
+
+# 1. Introduction
+
+With rising healthcare expenses and increased access to big data in healthcare, how to effectively improve the efficiency of healthcare systems has become a critical issue that must be addressed. Length of Stay (LOS) is an important metric for assessing hospital operational efficiency and healthcare service quality, as it is not only closely related to resource allocation but also has a significant impact on patient recovery and hospital cost management[1]. As a result, in recent years, precise estimation and prediction of length of stay has emerged as a key area of academic research and practice[2].
+
+The goal of this project is to employ a data-driven strategy to investigate and predict the important characteristics that determine the length of a patient's hospital stay using various machine learning models. We use a huge dataset of 28,109 records published by the New York State Department of Health, which includes information about patient demographics, type of admission, and cost. During the data modeling step, three predictive models were built: Linear Regression, Classification and Regression Tree (CART), and Random Forest, and the models' stability was evaluated using Cross-Validation[3].
+
+The paper is organized as follows:
+
+The second section will introduce the dataset and the data preprocessing process, including missing value processing, feature engineering and data segmentation.
+
+The third section compares and analyses the model results to reveal the importance of key variables.
+
+The fourth part summarises the research results and proposes suggestions for improvement and future research directions.
+
+This study will give hospital administrators with an effective data analysis tool to help enhance the precision of healthcare resource allocation, hence improving the patient's hospitalization experience and lowering total healthcare expenses[4].
+
+# 2. Methodology
+
+## 2.1 Data Processing
+
+The dataset used in this study was derived from the New York State region's hospital management system and recorded patient hospitalisation data from mid-2022. The dataset contains 28,109 records and 23 variables, mainly including the target variable: Length.of.Stay (continuous variable indicating the number of days the patient was hospitalised.) and characteristic variables including numeric variables (e.g. Discharge.Year, APR.DRG.Code, APR.Severity.of.Illness.Code, Total.Charges, Total.) and categorical variables: (e.g. Hospital.Service.Area, Age.Group, Gender, Race, Ethnicity, Type.of.Admission, etc.).
+
+### 2.1.1 Data Cleaning
+
+(1) Variables (Payment.Typology.3) and (Payment.Typology.2) were excluded due to high missing values (83% and 41%, respectively).
+
+(2) For variables with minimal missing values (e.g., Ethnicity, Gender, Hospital.Service.Area), missing data were filled using mode imputation.
+
+(3) Columns with a single unique value, such as CCSR.Diagnosis.Code and CCSR.Diagnosis.Description, were removed to eliminate redundancy.
+
+### 2.1.2 Data Transformation and One-Hot Encoding
+
+(1) Logarithmic Transformation: Continuous numerical variables (Total.Charges, Total.Costs, Length.of.Stay) were log-transformed to normalize skewed distributions and reduce the impact of outliers.
+
+(2) Categorical variables were transformed into binary vectors using one-hot encoding while removing the first dummy to avoid multicollinearity.
+
+## 2.2 Data Segmentation
+
+70-30 Train-Test Split: The dataset will be split into 70% for training and 30% for testing, ensuring model generalization and reducing overfitting.
+
+## 2.3 Model Development
+
+Linear regression is a classical statistical method used to study the linear relationship between a dependent variable (target variable) and one or more independent variables (predictor variables). For multiple linear regression, the model equation is: $$
+Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \cdots + \beta_nX_n + \varepsilon
+$$
+
+The CART model is a classification and regression method based on a tree structure for dealing with nonlinear relationships and variable interactions.
+
+Random forest is an integrated learning method that consists of multiple decision trees that are integrated to improve the accuracy and stability of the model. It has high prediction accuracy, high generalization ability and can handle non-linear relationships and interactions between features.
+
+## 2.4 Model performance evaluation
+
+In order to comprehensively compare the performance of different models, this study adopts Root Mean Square Error (RMSE) as the main assessment metric. And the cross validation method is added to test the models, and finally the comparison of the computational model performance is based on the results of No-Cross Validation (No-CV) and With-CV[5].
+
+In this study, the root mean square error (RMSE) is calculated as: $RMSE = \sqrt{\frac{\sum_{i=1}^n (y_i - \hat{y}_i)^2}{n}}$
+
+```{r setup, include=FALSE}
+# Load R libraries
+library(dplyr) # %>% 
+library(ggplot2) # ggplot
+library(tidyverse) # rownames_to_column
+library(kableExtra) # kbl
+library(broom) # tidy
+library(gridExtra) # grid.arrange
+library(scales) # comma
+library(e1071) # skewness
+library(ggpubr) # stat_compare_means & ggarrange
+library(fastDummies) # dummy_cols
+library(caret) # createDataPartition
+library(car) # vif
+library(rpart) # rpart
+library(Metrics) # rmse
+
+#### Ⅰ. Read Data ####
+setwd("/Users/15792/Desktop/HW/625/Final Project") # Set Working Directory
+data <- read.csv("INF002v4.csv", header = T) # Read data
+
+## 1. Convert to numeric variables
+clean_and_convert_to_numeric <- function(x) {
+  x_cleaned <- gsub(",", "", x)  # Remove thousandths comma
+  as.numeric(x_cleaned)  # Convert to numeric variables
+}
+data <- data %>%  mutate(Total.Charges = clean_and_convert_to_numeric(Total.Charges),
+                         Total.Costs = clean_and_convert_to_numeric(Total.Costs),
+                         Length.of.Stay = as.numeric(Length.of.Stay))
+
+# 2. Convert to categorical variable
+data <- data %>% mutate(across(where(is.character), as.factor))
+
+# 3. Variables Desciption table
+data_str <- capture.output(str(data))  # Captures the output of str()
+
+var_info <- lapply(data_str[-1], function(line) { # Parsing output to extract variable names and types
+  parts <- strsplit(line, ":")  # split by colon
+  name <- trimws(parts[[1]][1]) 
+  type <- trimws(parts[[1]][2])
+  list(name = name, type = type)
+})
+var_info_df <- do.call(rbind, lapply(var_info, as.data.frame))
+var_info_df$type <- gsub("^(Factor w/ \\d+ levels).*", "\\1", var_info_df$type)  
+var_info_df$type <- gsub("^(Factor w/ \\d+ level).*", "\\1", var_info_df$type)  
+var_info_df$type <- gsub("^(num).*", "\\1", var_info_df$type)  
+var_info_df$type <- gsub("^(int).*", "\\1", var_info_df$type)  
+var_info_df$name <- gsub("^\\$\\s*", "", var_info_df$name)
+
+var_info_df <- var_info_df %>% 
+  mutate(Role = ifelse(name == "Length.of.Stay", "Target", "Feature"))
+
+kbl(var_info_df, caption = "the Description of Variables", booktabs = T) %>% 
+  kable_styling(latex_options = "striped", full_width = FALSE, font_size = 7)
+
+#### Ⅱ.Exploratory Data Analysis ####
+
+# 1. Data preprocessing
+## 1.1 Missing data
+data <- data %>% 
+  mutate_all(~na_if(trimws(.), "")) %>% # Replace blank values with NA
+  mutate(Ethnicity = na_if(Ethnicity, "Unknown")) %>% 
+  mutate(Gender = na_if(Gender, "U")) %>% 
+  mutate(Total.Charges = clean_and_convert_to_numeric(Total.Charges),
+         Total.Costs = clean_and_convert_to_numeric(Total.Costs),
+         Length.of.Stay = as.numeric(Length.of.Stay)) %>% 
+  mutate(across(where(is.character), as.factor))
+
+missing_values_df <- data.frame(
+  Variable = names(sapply(data, function(x) sum(is.na(x)))),
+  Missing_ratio = round(sapply(data, function(x) sum(is.na(x))) / nrow(data),5),
+  Missing_cnt = sapply(data, function(x) sum(is.na(x)))
+)
+missing_values_df %>% 
+  filter(Missing_ratio > 0) %>% 
+  ggplot(aes(x = reorder(Variable, -Missing_ratio), y = Missing_ratio)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = scales::percent(Missing_ratio)), hjust = 0.5, size = 3) +  
+  coord_flip() +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "VariableS", y = "Proportion of Missing Values") +
+  theme_minimal()
+sum(is.na(data))
+MissingDropVar <- c("Payment.Typology.3", "Payment.Typology.2") # Remove variables with more than 40% missing values
+data <- data %>%  select(-one_of(MissingDropVar))
+
+sum(is.na(data))
+
+# Mode filling 
+mode_fill_1 <- names(sort(table(data$Hospital.Service.Area), decreasing = TRUE))[1]
+data$Hospital.Service.Area[is.na(data$Hospital.Service.Area)] <- mode_fill_1
+
+mode_fill_2 <- names(sort(table(data$APR.Severity.of.Illness.Description), decreasing = TRUE))[1]
+data$APR.Severity.of.Illness.Description[is.na(data$APR.Severity.of.Illness.Description)] <- mode_fill_2
+
+mode_fill_3 <- names(sort(table(data$APR.Risk.of.Mortality), decreasing = TRUE))[1]
+data$APR.Risk.of.Mortality[is.na(data$APR.Risk.of.Mortality)] <- mode_fill_3
+
+mode_fill_4 <- names(sort(table(data$Ethnicity), decreasing = TRUE))[1]
+data$Ethnicity[is.na(data$Ethnicity)] <- mode_fill_4
+
+mode_fill_5 <- names(sort(table(data$Gender), decreasing = TRUE))[1]
+data$Gender[is.na(data$Gender)] <- mode_fill_5
+
+#sum(is.na(data)) # Check if there are any missing values left
+```
+
+# 3. Result
+
+## 3.1 Distribution of Demographics in terms of Length of Stay
+
+By looking at the distribution of demographic data under Length of Stay, it can be seen that Hospital.Service.Area, Age.Group, Gender, and Race are all significantly different (p value \< 0.05) from the distribution of Length of Stay under Group, except for Ethnicity.
+
+    (1) it can be seen that patients in New York City, Southern Tier have longer Length of Stay relative to other regions.
+    (2) The older the patient, the longer the Length of Stay.
+    (3) Male patients have a longer Length of Stay than female patients.
+    (4) Length of Stay is longer for patients of Black/African American race.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE,fig.width = 14, fig.height = 8, fig.cap='Boxplot for Distribution of Demographics in terms of Length of Stay'}
+p1 <- ggplot(data, aes(x = Hospital.Service.Area, y = log(Length.of.Stay), fill = Hospital.Service.Area)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Hospital.Service.Area", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p2 <- ggplot(data, aes(x = Age.Group, y = log(Length.of.Stay), fill = Age.Group)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) + # Calculate p-value
+  labs(x = "Age.Group", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p3 <- ggplot(data, aes(x = Gender, y = log(Length.of.Stay), fill = Gender)) +
+  geom_boxplot() +
+  stat_compare_means(method = "wilcox.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Gender", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p4 <- ggplot(data, aes(x = Race, y = log(Length.of.Stay), fill = Race)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Race", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+p5 <- ggplot(data, aes(x = Ethnicity, y = log(Length.of.Stay), fill = Ethnicity)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Ethnicity", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggarrange(p1, ggarrange(p2, p3, ncol = 2), ggarrange(p4, p5, ncol = 2), ncol = 1)
+
+```
+
+## 3.2 Distribution of Admission Information in terms of Length of Stay
+
+There was a statistically significant difference between Type.of.Admission, Emergency Department Indicator and Length of Stay, all with p-values less than 0.05.
+
+(1) Trauma patients have a higher median length of stay than other types of hospitalization. Trauma patients are usually admitted to the hospital as a result of an accident or severe trauma, and these patients tend to have more complex conditions that may require multiple tests, treatments, and surgeries. These patients may be accompanied by multiple comorbidities, leading to a longer course of treatment, which in turn increases the number of hospital days.
+
+(2) Non-emergency hospitalized patients may require multiple treatments or post-surgical recoveries, resulting in additional days of hospitalization. Emergency patients, despite being more severely ill, may have shorter hospital stays due to better emergency care and treatment standards. Second, non-emergency patients may face stricter discharge criteria, and hospitals may take longer to assure patient recovery and stability, influencing the median number of hospital days.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE,fig.width = 5, fig.height = 2, fig.cap='Boxplot for Distribution of Admission Information in terms of Length of Stay'}
+q1 <- ggplot(data, aes(x = Type.of.Admission, y = log(Length.of.Stay), fill = Type.of.Admission)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Type.of.Admission", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+q2 <- ggplot(data, aes(x = Emergency.Department.Indicator, y = log(Length.of.Stay), fill = Emergency.Department.Indicator)) +
+  geom_boxplot() +
+  stat_compare_means(method = "kruskal.test", label = "p.format", size = 3, label.y = 4, hjust = -0.5) +  
+  labs(x = "Emergency.Department.Indicator", y = "log(Length of Stay)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggarrange(q1, q2, ncol = 2)
+```
+
+## 3.3 Linear relationship between Charges and Costs
+
+By building a linear regression model after logarithmic transformation of the relationship between Total Charges for hospitalization (Total Charges) and Total Costs, we observed that the two showed a significant linear relationship, and each parameter in the model had a very high level of significance (p \< 2e-16), which demonstrated the validity and reliability of the model; the value of the multiple R² is 0.8046, indicating that about 80.46% of the total cost variation can be explained by the total cost variation. The skewness values of Total Charges and Total Costs (0.242 and 0.376, respectively) indicate that the distribution is close to normal and the data distribution is more concentrated.
+
+(1) Cost reasonableness: by building this linear regression model, hospitals are able to predict hospitalization costs more accurately and set reasonable fees based on costs. This helps hospitals to be more transparent and fair in setting fees and avoid unnecessary and indiscriminate charging.
+
+(2) Cost control: Hospital management can use this model to evaluate the costs and corresponding charges for different medical services to ensure that the fees match the actual costs. This not only helps to improve the financial transparency of the hospital, but also helps to enhance patients' trust in hospital charges.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE,fig.width = 6, fig.height = 3, fig.cap='Linear relationship between Charges and Costs'}
+model_nonlog <- lm(Total.Charges ~ Total.Costs, data = data)
+model_nonlog_summary <- tidy(model_nonlog)
+intercept <- round(model_nonlog_summary$estimate[1], 2)  # intercept
+slope <- round(model_nonlog_summary$estimate[2], 2)      # slope
+p_value <- round(model_nonlog_summary$p.value[2], 2)     # p-value
+adjusted_r_squared <- round(summary(model_nonlog)$adj.r.squared,4) # R squared
+
+r1 <- ggplot(data = data, aes(x = Total.Costs, y = Total.Charges)) +
+  geom_point(col = 'blue') + 
+  geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
+  annotate("text", x = min(data$Total.Costs), y = max(data$Total.Charges) * 0.8, 
+           label = paste0("y = ", slope, "x + ", intercept), 
+           hjust = 0, size = 4, color = "black") +
+  annotate("text", x = min(data$Total.Costs), y = max(data$Total.Charges) * 0.75, 
+           label = paste0("P value = ", p_value,";","R squared = ", adjusted_r_squared),
+           hjust = 0, size = 3, color = "red") + 
+  labs(title = "Scatter plot",
+       x = "Total Costs",
+       y = "Total Charges") +
+  theme_minimal() + scale_x_continuous(labels = comma) + scale_y_continuous(labels = comma) 
+
+model_log <- lm(log(Total.Charges) ~ log(Total.Costs), data = data)
+model_log_summary <- tidy(model_log)
+intercept <- round(model_log_summary$estimate[1], 2)  # intercept
+slope <- round(model_log_summary$estimate[2], 2)      # slope
+p_value <- round(model_log_summary$p.value[2], 2)     # p-value
+adjusted_r_squared <- round(summary(model_log)$adj.r.squared,4) # R squared
+
+r2 <- ggplot(data = data, aes(x = log(Total.Costs), y = log(Total.Charges))) +
+  geom_point(col = 'blue') + 
+  geom_smooth(method = "lm", se = FALSE, color = "black", aes(group = 1)) +
+  annotate("text", x = min(log(data$Total.Costs)), y = max(log(data$Total.Charges)) * 0.78, 
+           label = paste0("y = ", slope, "x + ", intercept), 
+           hjust = 0, size = 4, color = "black") +
+  annotate("text", x = min(log(data$Total.Costs)), y = max(log(data$Total.Charges)) * 0.755, 
+           label = paste0("P value = ", p_value,";","R squared = ", adjusted_r_squared),
+           hjust = 0, size = 3, color = "red") + 
+  labs(title = "Scatter plot-log transformation",
+       x = "Total Costs",
+       y = "Total Charges") +
+  theme_minimal() 
+
+
+log_charges <- log(data$Total.Charges)
+r3 <- ggplot(data, aes(x = log_charges)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  stat_density(aes(y = ..density..), geom = "line") +
+  annotate("text", x = mean(log_charges), 
+           y = max(density(log_charges)$y),  
+           label = paste("Skewness:", round(skewness(log_charges), 3)), 
+           size = 3, color = "red") +
+  labs(title = "Density Plot of Log(Total Charges) ",
+       x = "Log(Total Charges)",
+       y = "Density") +
+  theme_minimal()
+
+log_costs <- log(data$Total.Costs)
+r4 <- ggplot(data, aes(x = log_costs)) +
+  geom_density(fill = "blue", alpha = 0.5) +
+  stat_density(aes(y = ..density..), geom = "line") +
+  annotate("text", x = mean(log_costs), 
+           y = max(density(log_costs)$y),  
+           label = paste("Skewness:", round(skewness(log_costs), 3)), 
+           size = 3, color = "red") +
+  labs(title = "Density Plot of Log(Total Costs) ",
+       x = "Log(Total Charges)",
+       y = "Density") +
+  theme_minimal()
+
+grid.arrange(r1,r2,r3,r4, ncol = 2)
+```
+
+```{r, include=FALSE}
+#### Ⅳ.Modeling  ####
+# 1. Feature engineering
+## 1.1 Deleting variables with only one value
+dropVar <- c("CCSR.Diagnosis.Code", "CCSR.Diagnosis.Description")
+data <- data %>% select(-one_of(dropVar))
+## 1.2 One hot encoding the categorical variables
+dataDummies <- data %>% 
+  select_if(is.factor) %>% 
+  dummy_cols(remove_first_dummy = TRUE, remove_selected_columns = TRUE) 
+## 1.3 Logarithmic transformation
+dataNum <- data %>%  
+  select_if(is.numeric) %>% 
+  mutate(across(everything(), log))
+
+# 2. Dataset segmentation
+## Combined data
+modelData <- cbind(dataNum, dataDummies)
+print(paste0("Number of independent variables after feature engineering is:",dim(modelData)[[2]]-1))
+# Setting the random seed
+set.seed(123) 
+# Partition the dataset
+train_index <- createDataPartition(modelData$Length.of.Stay, p = 0.7, list = FALSE) 
+# Create training and test sets
+modelData <- modelData %>%
+  rename_with(~ gsub(" ", "_", .)) %>%
+  rename_with(~ gsub("-", "_", .)) %>%
+  rename_with(~ gsub("/", "_", .)) %>%
+  rename_with(~ gsub("'", "_", .)) %>%
+  rename_with(~ gsub("\\(", "", .)) %>%
+  rename_with(~ gsub("\\)", "", .)) %>%
+  rename_with(~ gsub(">", "_", .)) %>%
+  rename_with(~ gsub(",", "_", .))
+
+train_data <- modelData[train_index, ] 
+test_data <- modelData[-train_index, ]
+```
+
+```{r, include=FALSE}
+#### Model 1. Linear Regression ####
+lm.model <- glm(Length.of.Stay~., data = train_data)
+stepwise_model <- step(lm.model, direction = "backward")
+
+vif_values <- vif(stepwise_model)
+stepwise_vars <- names(vif_values)
+stepwise_vars <- gsub("`", "", stepwise_vars)
+print(paste0("Number of independent variables after stepwise regression is:",length(stepwise_vars)))
+high_vif_vars <- names(vif_values[vif_values > 10])
+remaining_vars <- setdiff(stepwise_vars, high_vif_vars)
+print(paste0("Number of independent variables after stepwise regression and VIF is:",length(remaining_vars)))
+
+train_data_new <- train_data %>% 
+  select(c("Length.of.Stay", intersect(remaining_vars, names(train_data))))
+
+test_data_new <- test_data %>% 
+  select(c("Length.of.Stay", intersect(remaining_vars, names(test_data))))
+
+
+lm.model.updated <- glm(Length.of.Stay~., data = train_data_new)
+
+importance <- varImp(lm.model.updated, scale = FALSE)
+importance$Variable <- rownames(importance)
+
+# Mapping the importance of variables
+ggplot(importance, aes(x = reorder(Variable, Overall), y = Overall)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Variable Importance", x = "Variables", y = "Importance Score") +
+  theme_minimal()
+
+# Predict and calculate RMSE
+predict_lm <- predict(lm.model.updated, newdata = test_data_new[,-1])
+predict_lm <- exp(predict_lm)
+rmse_lm <- rmse(predict_lm, test_data_new$Length.of.Stay)
+print(paste("RMSE for Linear Regression: ", rmse_lm))
+
+#### Model 2. Classification and Regression Trees ####
+library(rpart)
+library(rpart.plot)
+set.seed(1234)
+rpart_model <- rpart(Length.of.Stay ~., data = train_data, method = "anova")
+rpart.plot(rpart_model, box.palette = c("pink", "gray"))
+num_terminal_nodes <- sum(rpart_model$frame$var == "<leaf>")
+print(paste0("The number of terminal nodes is:",num_terminal_nodes))
+
+predict_rpart <- predict(rpart_model, newdata =  test_data[,-1])
+predict_rpart <- exp(predict_rpart)
+rmse_rpart <- rmse(predict_rpart, test_data$Length.of.Stay)
+print(paste("RMSE for CART: ", rmse_rpart))
+
+
+#### Model 3. Random Forest ##### 
+library(randomForest)
+set.seed(123)  # Set random seed for reproducibility
+
+# Train Random Forest model
+rf_model <- randomForest(Length.of.Stay ~ ., data = train_data, ntree = 500, mtry = sqrt(ncol(train_data)-1))
+# Print the Random Forest model summary
+print(rf_model)
+# Evaluate the importance of variables
+rf_importance <- importance(rf_model)
+rf_importance_df <- data.frame(Variable = rownames(rf_importance), Importance = rf_importance[, 1])
+# Plot variable importance
+ggplot(rf_importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "orange") +
+  coord_flip() +
+  labs(title = "Random Forest - Variable Importance", x = "Variables", y = "Importance Score") +
+  theme_minimal()
+
+# Predict on test set
+predict_rf <- predict(rf_model, newdata = test_data[,-1])
+
+# Transform the predictions back (log scale)
+predict_rf <- exp(predict_rf)
+
+# Calculate RMSE for Random Forest model
+rmse_rf <- rmse(predict_rf, test_data$Length.of.Stay)
+print(paste("RMSE for Random Forest: ", rmse_rf))
+
+
+#### Cross-Validation for Linear Regression, CART, Random Forest Model ####
+
+# 5-fold cv
+train_control <- trainControl(method = "cv", number = 5, savePredictions = "all")
+
+# 1. Linear Regression with Cross-validation
+set.seed(123)
+cv_lm <- train(Length.of.Stay ~ ., data = train_data_new, method = "lm", trControl = train_control)
+print(cv_lm)
+rmse_lm_cv <- cv_lm$results$RMSE
+print(paste("RMSE for Linear Regression with CV: ", cv_lm$results$RMSE))
+
+# 2.2 CART with Cross-validation
+set.seed(123)
+cv_rpart <- train(Length.of.Stay ~ ., data = train_data_new, method = "rpart", trControl = train_control)
+print(cv_rpart)
+rmse_rpart_cv <- cv_rpart$results$RMSE[1]
+print(paste("RMSE for CART with CV: ", rmse_rpart_cv))
+
+# 2.3 Random Forest with Cross-validation
+set.seed(123)
+cv_rf <- train(Length.of.Stay ~ ., data = train_data_new, method = "rf", trControl = train_control, ntree = 100)
+print(cv_rf)
+rmse_rf_cv <- cv_rf$results$RMSE[2]
+print(paste("RMSE for Random Forest with CV: ", rmse_rf_cv))
+```
+
+## 3.4 Model evaluation and comparison
+Comparing the performance of the three models together, the Random Forest model performed the best:
+
+The RMSE of Random Forest (8.83 without CV, 0.3968 with CV), shows strong nonlinear modelling and generalisation capabilities.
+Compared to linear regression and CART, Random Forest is more advantageous in dealing with complex data features, and is especially suitable for high-dimensional datasets containing nonlinear relationships and interactions.
+
+```{r, echo =FALSE, message=FALSE, warning=FALSE,fig.width = 7, fig.height = 5, fig.cap='RMSE for the three models'}
+#### Ⅴ.RMSE Results for the three models  ####
+results_rmse <- data.frame(
+  Model = c("Linear Regression", "CART", "Random Forest"),
+  RMSE_No_CV = c(rmse_lm, rmse_rpart, rmse_rf),
+  RMSE_With_CV = c(rmse_lm_cv, rmse_rpart_cv, rmse_rf_cv))
+
+kbl(results_rmse, caption = "RMSE for the three models", booktabs = TRUE) %>% 
+  kable_styling(latex_options = "striped", full_width = FALSE, font_size = 7)
+```
+# 4. Conclusion
+
+In-depth analyses of length of stay data revealed that length of stay was significantly longer for older patients (70 years and older), male patients, black or African American patients, and patients from the New York City and Southern Tier Hospital service areas. Furthermore, trauma admissions were much longer than other admission types, and hospital expenses (Total.expenses and Total.Charges) were strongly positively connected with hospital length of stay, with linear regression analyses revealing a significant positive relationship. In the model performance comparison, although linear regression can effectively capture linear relationships, it is difficult to deal with the nonlinear features in the data (RMSE = 13.05); the CART model captures some of the nonlinear relationships through the tree structure, which improves the performance (RMSE = 9.64); and the Random Forest model performs the best (RMSE = 8.83), which can effectively deal with the nonlinear relationship and the interaction between variables interactions, with the highest prediction accuracy and generalisation ability.
+
+Research Recommendations and Improvements: more accurate filling methods (e.g., KNN filling or machine learning prediction) can be explored for the handling of missing data. The introduction of interaction terms and more advanced feature engineering can also be considered to further improve model performance.
+
+Overall, this work provides an important decision-making foundation for optimizing hospital resource allocation, controlling costs, and managing high-risk patients, and it can be coupled with other machine learning models in the future to improve prediction effect and model interpretability.
+
+# References
+1. Robinson G H, Davis L E, Leifer R P. Prediction of hospital length of stay[J]. Health services research, 1966, 1(3): 287.
+2. Clarke A, Rosen R. Length of stay: how short should hospital care be?[J]. The European Journal of Public Health, 2001, 11(2): 166-170.
+3. Lequertier, Vincent, et al. "Hospital length of stay prediction methods: a systematic review." Medical care 59.10 (2021): 929-938.
+4. Robinson G H, Davis L E, Leifer R P. Prediction of hospital length of stay[J]. Health services research, 1966, 1(3): 287.
+5. Verburg, Ilona WM, et al. "Comparison of regression methods for modeling intensive care length of stay." PloS one 9.10 (2014): e109684.
+
+# Contribution
+Ya Wang: Contributions include building random forest models, data processing and cleaning, and report writing.
+Suyuan Wang: Contributions include building linear regression models, data analysis and processing, and report writing.
+Yu Qing: Contributions include building cart models, data analysis and processing, and report writing.
+Yile Zhu: Contributions have identified datasets and code frameworks, model visualisation and comparative analysis of results, integrated reports
